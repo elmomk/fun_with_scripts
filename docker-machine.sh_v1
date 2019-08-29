@@ -1,0 +1,108 @@
+#!/bin/bash 
+
+### ./docker-machine.sh machine-name aws-region
+
+# use local env
+#export AWS_ACCESS_KEY_ID=
+#export AWS_SECRET_ACCESS_KEY=
+
+set -x
+
+ENVNAME=$1
+DATE=$(date +%Y%m%d%H%M%N)
+REGION=$2 #ap-northeast-1  #not using this variable for the moment
+
+if [ $ENVNAME == "prod" ]; then
+        NAME=$(docker-machine ls | grep $ENVNAME | grep -v pre-prod)
+else
+        NAME=$(docker-machine ls | grep $ENVNAME)
+fi
+
+echo $NAME
+
+
+##################################################################
+# functions
+
+mydmenv () {
+if [ $(echo $NAME | awk '{print $1}') == ${ENVNAME} ]; then
+	echo "env is set up proceeding into env from ${ENVNAME}"
+	eval $(docker-machine env ${ENVNAME}) 
+	docker info
+	docker-compose down -v
+	docker-compose up -d
+	#docker-compose exec app php artisan key:generate
+	docker-compose exec -T app php artisan config:cache
+	docker-compose exec -T app php artisan config:clear
+	#############################################################
+	#only for first time ##
+	## add -T to disable pseudo-tty allocation
+	sleep 30
+	docker-compose exec -T app php artisan migrate:refresh --seed
+	# should change to this
+	#docker-compose exec -T app php artisan migrate
+	#############################################################
+	docker info
+	docker-compose ps
+	docker-machine env ${ENVNAME}
+	docker-machine ls
+else 
+	echo "env isn't set up, setting up ${ENVNAME} right now"
+	docker-machine -D create --driver=amazonec2 --amazonec2-region=us-west-2 --amazonec2-vpc-id=vpc-07f2cf06730d464fb --amazonec2-security-group="Prod to Prod" ${ENVNAME} 
+	echo "end of creating ${ENVNAME}"
+	mydmenv 
+fi
+}
+check_build () {
+	if [ $? -eq 0 ]; then
+		echo "build accomplished"
+	else
+		echo "build failed, check volume space and memory"
+		df -hT
+		free -h
+		exit 1
+	fi
+}
+
+buildimage () {
+	echo "this is version $DATE"
+	ls -halt
+	aws ecr get-login --no-include-email --region ap-northeast-1
+	$(aws ecr get-login --no-include-email --region ap-northeast-1)
+	docker build -f laravel.app.dockerfile -t kibage/kibage-backend .
+	check_build
+	docker tag kibage/kibage-backend:latest 785708698396.dkr.ecr.ap-northeast-1.amazonaws.com/kibage/kibage-backend:$DATE
+       	docker push 785708698396.dkr.ecr.ap-northeast-1.amazonaws.com/kibage/kibage-backend:$DATE
+	docker build -f laravel.web.dockerfile -t kibage/kibage-frontend .
+	check_build
+	docker tag kibage/kibage-frontend:latest 785708698396.dkr.ecr.ap-northeast-1.amazonaws.com/kibage/kibage-frontend:$DATE
+	docker push 785708698396.dkr.ecr.ap-northeast-1.amazonaws.com/kibage/kibage-frontend:$DATE
+
+}
+
+reduce_docker_space () {
+	if [ $(df -T |grep xfs | awk '{print $4}') -gt 13485760 ]; then
+		echo "docker is taking up too much space"
+		docker system prune --all --force
+	else
+		df -hT
+		echo "has not yet exceeded 10GiB"
+	fi
+}
+
+########################################################################3
+# main script starts here
+
+reduce_docker_space
+
+
+# appending $DATE to image
+sed -e '/kibage-/s/$/'$DATE'/' docker-compose.yml
+sed -i '/kibage-/s/$/'$DATE'/' docker-compose.yml
+
+buildimage
+mydmenv # sets up ec2 and/or updates docker-compose
+
+## deleting $DATE at the end of image
+#sed -e '/'$DATE'/s/$//g' docker-compose.yml
+#sed -i 's/'$DATE'//g' docker-compose.yml

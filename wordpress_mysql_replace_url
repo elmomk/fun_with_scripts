@@ -1,0 +1,18 @@
+MariaDB [wp_usequantum]>  SELECT * from wp_options WHERE option_name = 'home' OR option_name = 'siteurl';
+MariaDB [wp_usequantum]> UPDATE wp_options SET option_value = replace(option_value, 'http://18.179.119.45', 'http://usequantum.dev.logicsolutions.com') WHERE option_name = 'home' OR option_name = 'siteurl';
+MariaDB [wp_usequantum]> UPDATE wp_posts SET guid = replace(guid, 'http://18.179.119.45','http://usequantum.dev.logicsolutions.com');
+MariaDB [wp_usequantum]> UPDATE wp_posts SET post_content = replace(post_content, 'http://18.179.119.45', 'http://usequantum.dev.logicsolutions.com');
+MariaDB [wp_usequantum]> UPDATE wp_postmeta SET meta_value = replace(meta_value,'http://18.179.119.45','http://usequantum.dev.logicsolutions.com');
+
+MariaDB [wp_usequantum]> SELECT option_name FROM wp_options;
+
+
+
+
+AVADA
+
+I had the same issue, it is a cache that is created by Avada theme.
+
+To fix it reset the CSS and JS dynamic caches:
+
+Avada > Theme Options > Advanced > Dynamic CSS & JS > Reset Fusion Caches
