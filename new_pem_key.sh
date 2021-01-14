@@ -6,4 +6,7 @@ if [ $# != 1 ]; then
     exit 1
 fi
 
-ssh-keygen -t rsa -f $NAME_OF_NEW_KEY_PEM
+ssh-keygen -P "" -b 4096 -t rsa -f ~/.ssh/$NAME_OF_NEW_KEY_PEM
+
+ls ~/.ssh
+echo done
